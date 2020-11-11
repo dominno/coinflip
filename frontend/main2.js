@@ -56,60 +56,125 @@ async function DisplayContractBalance()
     $('#contractBalance').text( contractBalance );
 }
 
-
-
-
-async function depositFunds(valueEther)
+function depositFunds(valueEther)
 {
     var config = {
-        value: web3.utils.toWei(valueEther, "ether"),
+        value: web3.utils.toWei(valueEther.toString(), "ether").toString(),
         from: web3.currentProvider.selectedAddress
     };
-    console.log(config);
-    alert('22');
     contractInstance.methods.deposit().send(config)
     .on("transactionHash",function(hash){
             console.log(hash);
-            alert('22');
         })
     .on("confirmation", function(confirmationNr){
             console.log(confirmationNr);
-            alert('22');
-
          })
     .on("receipt", function(receipt){
-            console.log(receipt);              
-            alert('22');
+            console.log(receipt); 
+            UpdateDisplay();                 
     })
     .on("error", function(error){
-        alert(error);
-        alert('22');
-    });
-    
+        console.log(error);
+    });    
+}
+
+function withdrawFunds(valueEther)
+{
+    let value = web3.utils.toWei(valueEther.toString(), "ether").toString();
+    contractInstance.methods.withdraw(value).send()
+    .on("transactionHash",function(hash){
+            console.log(hash);
+        })
+    .on("confirmation", function(confirmationNr){
+            console.log(confirmationNr);
+         })
+    .on("receipt", function(receipt){
+            console.log(receipt); 
+            UpdateDisplay();                 
+    })
+    .on("error", function(error){
+        console.log(error);
+    });    
+}
+
+function betSend(side, valueEther)
+{
+    contractInstance.methods.bet(side, valueEther.toString()).send()
+    .on("transactionHash",function(hash){
+            console.log(hash);
+        })
+    .on("confirmation", function(confirmationNr){
+            console.log(confirmationNr);
+         })
+    .on("receipt", function(receipt){
+            console.log(receipt); 
+            UpdateDisplay();                 
+    })
+    .on("error", function(error){
+        console.log(error);
+    });    
 }
 
 function deposit()
 {   
-    console.log($("#DepositInputAmount").val());
-    depositFunds($("#DepositInputAmount").val()).then( UpdateDisplay() );
+    let value = $("#DepositInputAmount").val()
+    depositFunds(value);
+}
+
+function withdraw()
+{   
+    let value = $("#DepositInputAmount").val()
+    withdrawFunds(value);
+}
+
+function bet()
+{   
+    let value = web3.utils.toWei($("#BetInputAmount").val().toString(), "ether").toString();
+    let side = 0;
+    betSend(side, value);
 }
 
 function UpdateDisplay()
 {
-    DisplayBalance().then( DisplayContractBalance()).then( DisplayContractBalance() );
+    DisplayBalance().then( DisplayContractBalance()).then( DisplayPlayerBalance()).then( GetPlayerEvents() );
+}
+
+function GetPlayerEvents()
+{
+    let winsEvents;
+    let lostEvents;
+    contractInstance.getPastEvents('betWin', {
+        filter: {player: [web3.currentProvider.selectedAddress]},
+        fromBlock: 0,
+        toBlock: 'latest'
+    })
+    .then(function(eventsStream){
+        winsEvents = eventsStream.map(function(event) {
+            return event.returnValues;
+        });
+        $('#winEvents').text(winsEvents.length)         
+    });
+    contractInstance.getPastEvents('betLost', {
+        filter: {player: web3.currentProvider.selectedAddress},
+        fromBlock: 0,
+        toBlock: 'latest'
+    })
+    .then(function(eventsStream){
+        lostEvents = eventsStream.map(function(event) {
+            return event.returnValues;
+        });  
+        $('#lostEvents').text(lostEvents.length)         
+    });
 }
 
 
-
 $(document).ready(function() {
-    window.ethereum.enable().then(function(accounts){       
-        contractInstance = new web3.eth.Contract(abi,contractAddress,{from: web3.currentProvider.selectedAddress});
-      });
     detectMetamask().then(function(){
         initDapp();
     });
-
     $("#DepositButton").click( deposit );
+    $("#WithdrawButton").click( withdraw );
+    $("#BetButton").click( bet );
     
     
 

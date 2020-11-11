@@ -4,7 +4,7 @@ const truffleAssert = require("truffle-assertions");
 const { before } = require("lodash");
 
 
-contract("CoinFlip", async function (accounts) {
+contract("CoinFlip", async function ([owner, player]) {
     let instance;
 
     describe('deposit and withdraw', async () => {
@@ -13,13 +13,13 @@ contract("CoinFlip", async function (accounts) {
 
         beforeEach(async function () {
             instance = await CoinFlip.new({ value: web3.utils.toWei("10", "ether") });
-            realBalanceBefore = await web3.eth.getBalance(accounts[0]);
-            await instance.deposit({ value: web3.utils.toWei("1", "ether") });
-            realBalanceAfter = await web3.eth.getBalance(accounts[0]);
+            realBalanceBefore = await web3.eth.getBalance(player);
+            await instance.deposit({ value: web3.utils.toWei("1", "ether"), from: player });
+            realBalanceAfter = await web3.eth.getBalance(player);
         });
 
         it("should be able to deposit funds to contract", async function () {
-            let playerBalance = await instance.playerBalance(accounts[0]);
+            let playerBalance = await instance.playerBalance(player);
             let contractBalance = await web3.eth.getBalance(instance.address);
             assert(contractBalance = web3.utils.toWei("11", "ether"));
             assert(playerBalance == web3.utils.toWei("1", "ether"));
@@ -27,21 +27,29 @@ contract("CoinFlip", async function (accounts) {
         });
 
         it("should be able to withdraw user balance from contract", async function () {
-            await instance.withdraw({ 'from': accounts[0] });
-            let playerBalance = await instance.playerBalance(accounts[0]);
+            await instance.withdraw(web3.utils.toWei("1", "ether"), { 'from': player });
+            let playerBalance = await instance.playerBalance(player);
             let contractBalance = await web3.eth.getBalance(instance.address);
-            realBalanceAfterWithdraw = await web3.eth.getBalance(accounts[0]);
+            realBalanceAfterWithdraw = await web3.eth.getBalance(player);
             assert(realBalanceAfterWithdraw > realBalanceAfter);
             assert(playerBalance == 0);
             assert(contractBalance = web3.utils.toWei("10", "ether"));
         });
         it("doposit should fail wrong ether send", async function () {
-            await truffleAssert.fails(instance.deposit({ value: web3.utils.toWei("0.1", "ether") }), truffleAssert.ErrorType.REVERT);
+            await truffleAssert.fails(instance.deposit({ value: web3.utils.toWei("0.1", "ether"), from: player }), truffleAssert.ErrorType.REVERT);
         });
-        it("withdraw should fail if user balance is 0", async function () {
-            await instance.withdraw({ 'from': accounts[0] });
-            await truffleAssert.fails(instance.withdraw({ 'from': accounts[0] }));
+        it("withdraw should fail if user balance is 0", async function () {            
+            await instance.withdraw(web3.utils.toWei("1", "ether"), { 'from': player });
+            await truffleAssert.fails(instance.withdraw(web3.utils.toWei("1", "ether"), { 'from': player }));
         });
+        it("should be able to withdraw all user balance", async function () {   
+            await instance.deposit({ value: web3.utils.toWei("1", "ether"), from: player });
+            let playerBalance = await instance.playerBalance(player);    
+            await instance.withdraw(playerBalance, { 'from': player });
+            let playerBalanceAfter = await instance.playerBalance(player);
+            assert(playerBalanceAfter == 0);        
+        });
+
 
     });
 
@@ -61,6 +69,37 @@ contract("CoinFlip", async function (accounts) {
         });
     });
 
+    describe('test owner deposit or withdraw from contract', async () => {
+        beforeEach(async function () {
+            instance = await CoinFlip.new({ value: web3.utils.toWei("10", "ether") })            
+        });
+        it("owner should be able to fund contract", async function () {
+            await instance.depositToContract({ value: web3.utils.toWei("1", "ether"), from: owner });
+            let contractBalance = await web3.eth.getBalance(instance.address);
+            let balance = await instance.balance();
+            assert(contractBalance == web3.utils.toWei("11", "ether"));
+            assert(balance == web3.utils.toWei("11", "ether"));
+        });
+        it("owner should be able to withdraw from contract", async function () {
+            await instance.withdrawFromContract({ from: owner  });
+            let contractBalance = await web3.eth.getBalance(instance.address);
+            let balance = await instance.balance();
+            assert(contractBalance == 0);
+            assert(balance == 0);
+        });
+        it("player should not be able to withdraw from contract", async function () {
+            await truffleAssert.fails(instance.withdrawFromContract({ from: player  }));
+            let contractBalance = await web3.eth.getBalance(instance.address);
+            let balance = await instance.balance();
+            assert(contractBalance > 0);
+            assert(balance > 0);
+        });
+        it("player should not be able to deposit to contract", async function () {
+            await truffleAssert.fails(instance.depositToContract({ value: web3.utils.toWei("1", "ether"), from: player }));            
+        });
+
+    });
+
     describe('test win and lose cases', async () => {
         let randomValue;
         let bettingSide;
@@ -70,25 +109,24 @@ contract("CoinFlip", async function (accounts) {
 
         describe('test win case', async () => {
             let result;
-
             beforeEach(async function () {
                 randomValue = 0;
                 bettingSide = 0;
                 instance = await MockedCoinFlip.new({ value: web3.utils.toWei("2", "ether") });
-                await instance.deposit({ value: web3.utils.toWei("2", "ether") });
+                await instance.deposit({ value: web3.utils.toWei("2", "ether"), from: player });
                 await instance._mock_setfakeRandomValue(randomValue);
-                playerBalanceBefore = parseFloat(await instance.playerBalance(accounts[0]));
+                playerBalanceBefore = parseFloat(await instance.playerBalance(player));
                 balanceBefore = await instance.balance();
-                result = await instance.bet(bettingSide, web3.utils.toWei("2", "ether"));
-                playerBalanceAfter = parseFloat(await instance.playerBalance(accounts[0]));
+                result = await instance.bet(bettingSide, web3.utils.toWei("2", "ether"), {from: player});
+                playerBalanceAfter = parseFloat(await instance.playerBalance(player));
             });
             it("player balance should be grater after win", async function () {
                 assert(playerBalanceAfter > playerBalanceBefore, "User balance was not increased after win");
             });
             it("player balance should not be increased after second win when contract balance was 0", async function () {
-                playerBalanceBefore = parseFloat(await instance.playerBalance(accounts[0]));
-                await truffleAssert.fails(instance.bet(bettingSide, { value: web3.utils.toWei("2", "ether") }));
-                playerBalanceAfter = parseFloat(await instance.playerBalance(accounts[0]));
+                playerBalanceBefore = parseFloat(await instance.playerBalance(player));
+                await truffleAssert.fails(instance.bet(bettingSide, web3.utils.toWei("2", "ether"), {from: player}));
+                playerBalanceAfter = parseFloat(await instance.playerBalance(player));
                 assert(playerBalanceAfter == playerBalanceBefore, "User balance was increased after win when contract balance was 0");
             });
             it("contract balance should be empty after player win and player wins all", async function () {
@@ -105,17 +143,16 @@ contract("CoinFlip", async function (accounts) {
 
         describe('test lose case', async () => {
             let result;
-
             beforeEach(async function () {
                 randomValue = 0;
                 bettingSide = 1;
                 instance = await MockedCoinFlip.new({ value: web3.utils.toWei("4", "ether") });
-                await instance.deposit({ value: web3.utils.toWei("2", "ether") });
+                await instance.deposit({ value: web3.utils.toWei("2", "ether"), from: player });
                 await instance._mock_setfakeRandomValue(randomValue);
-                playerBalanceBefore = parseFloat(await instance.playerBalance(accounts[0]));
+                playerBalanceBefore = parseFloat(await instance.playerBalance(player));
                 balanceBefore = await instance.balance();
-                result = await instance.bet(bettingSide, web3.utils.toWei("2", "ether"));
-                playerBalanceAfter = parseFloat(await instance.playerBalance(accounts[0]));
+                result = await instance.bet(bettingSide, web3.utils.toWei("2", "ether"), {from: player});
+                playerBalanceAfter = parseFloat(await instance.playerBalance(player));
             });
             it("player balance should be lower after lose", async function () {
                 assert(playerBalanceAfter < playerBalanceBefore, "User balance was not decreased after lose");
@@ -129,14 +166,6 @@ contract("CoinFlip", async function (accounts) {
                 const log = result.logs[0]
                 assert(log.event == 'betLost');
             });
-    
         })
-
     });
-
-    
-    
-    
-
-
 });

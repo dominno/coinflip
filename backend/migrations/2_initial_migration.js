@@ -1,5 +1,9 @@
 const CoinFlip = artifacts.require("CoinFlip");
 
 module.exports = function(deployer) {
-  deployer.deploy(CoinFlip, {value: web3.utils.toWei("100", "ether")});
+  if(deployer.network == "development" || deployer.network == "test"){
+    deployer.deploy(CoinFlip, {value: web3.utils.toWei("10", "ether")});
+  } else {
+    deployer.deploy(CoinFlip, {value: web3.utils.toWei("1", "ether")});
+  } 
 };

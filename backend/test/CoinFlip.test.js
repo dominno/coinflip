@@ -117,8 +117,12 @@ contract("CoinFlip", async function ([owner, player]) {
                 await instance._mock_setfakeRandomValue(randomValue);
                 playerBalanceBefore = parseFloat(await instance.playerBalance(player));
                 balanceBefore = await instance.balance();
-                result = await instance.bet(bettingSide, web3.utils.toWei("2", "ether"), {from: player});
+                await instance.bet(bettingSide, web3.utils.toWei("2", "ether"), {from: player});
+                result = await instance.__callback("0x7465737400000000000000000000000000000000000000000000000000000000", "0", "00000");
                 playerBalanceAfter = parseFloat(await instance.playerBalance(player));
+            });
+            it("after callback procesingAddresses for have to be set to false", async function () {
+                assert(await instance.procesingAddresses(player) == false);
             });
             it("player balance should be grater after win", async function () {
                 assert(playerBalanceAfter > playerBalanceBefore, "User balance was not increased after win");
@@ -135,9 +139,11 @@ contract("CoinFlip", async function ([owner, player]) {
                 let realBalance = await web3.eth.getBalance(instance.address);
                 assert(floatBalance == web3.utils.toWei("0", "ether"), "Contract balance did not match");
             });
-            it('emits a betWin event', async () => {
+            it('emits a win event', async () => {
                 const log = result.logs[0]
-                assert(log.event == 'betWin');
+                assert(log.event == 'betFinished');
+                assert(log.args.win == true);
+                
             });
         });
 
@@ -151,7 +157,8 @@ contract("CoinFlip", async function ([owner, player]) {
                 await instance._mock_setfakeRandomValue(randomValue);
                 playerBalanceBefore = parseFloat(await instance.playerBalance(player));
                 balanceBefore = await instance.balance();
-                result = await instance.bet(bettingSide, web3.utils.toWei("2", "ether"), {from: player});
+                await instance.bet(bettingSide, web3.utils.toWei("2", "ether"), {from: player});
+                result = await instance.__callback("0x7465737400000000000000000000000000000000000000000000000000000000", "1", "00000");
                 playerBalanceAfter = parseFloat(await instance.playerBalance(player));
             });
             it("player balance should be lower after lose", async function () {
@@ -164,7 +171,8 @@ contract("CoinFlip", async function ([owner, player]) {
             });
             it('emits a betLost event', async () => {
                 const log = result.logs[0]
-                assert(log.event == 'betLost');
+                assert(log.event == 'betFinished');
+                assert(log.args.win == false);
             });
         })
     });
